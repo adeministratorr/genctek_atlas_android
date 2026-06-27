@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>Gençtek Atlas - Leaflet & GeoJSON Harita</title>
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+    <style>
+        html, body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            background-color: #121212;
+            color: #e0e0e0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            overflow: hidden;
+        }
+        #map {
+            width: 100%;
+            height: 100%;
+            background-color: #121212;
+        }
+        /* Custom Glowing Ripple Markers */
+        .glowing-marker {
+            position: relative;
+        }
+        .glowing-marker .pulse {
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            background: #2196F3;
+            box-shadow: 0 0 0 rgba(33, 150, 243, 0.4);
+            animation: pulse 1.6s infinite;
+            position: absolute;
+            top: -9px;
+            left: -9px;
+            border: 2px solid #ffffff;
+        }
+        .glowing-marker.tech .pulse {
+            background: #00E676;
+            box-shadow: 0 0 0 rgba(0, 230, 118, 0.4);
+        }
+        .glowing-marker.art .pulse {
+            background: #E040FB;
+            box-shadow: 0 0 0 rgba(224, 64, 251, 0.4);
+        }
+        @keyframes pulse {
+            0% {
+                transform: scale(0.8);
+                box-shadow: 0 0 0 0 rgba(33, 150, 243, 0.7);
+            }
+            70% {
+                transform: scale(1.6);
+                box-shadow: 0 0 0 10px rgba(33, 150, 243, 0);
+            }
+            100% {
+                transform: scale(0.8);
+                box-shadow: 0 0 0 0 rgba(33, 150, 243, 0);
+            }
+        }
+        /* Overlay Controls */
+        .map-overlay {
+            position: absolute;
+            top: 12px;
+            left: 12px;
+            z-index: 1000;
+            background: rgba(30, 30, 30, 0.9);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            padding: 8px 12px;
+            max-width: calc(100% - 24px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+            backdrop-filter: blur(4px);
+        }
+        .map-overlay h4 {
+            margin: 0 0 4px 0;
+            font-size: 14px;
+            font-weight: bold;
+            color: #2196F3;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .map-overlay p {
+            margin: 0;
+            font-size: 11px;
+            color: #b0b0b0;
+            line-height: 1.3;
+        }
+        .theme-selector {
+            position: absolute;
+            top: 12px;
+            right: 12px;
+            z-index: 1000;
+            display: flex;
+            gap: 6px;
+        }
+        .map-btn {
+            background: rgba(30, 30, 30, 0.9);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            color: #ffffff;
+            padding: 6px 10px;
+            font-size: 11px;
+            font-weight: bold;
+            border-radius: 6px;
+            cursor: pointer;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            transition: all 0.2s;
+        }
+        .map-btn:active {
+            transform: scale(0.95);
+            background: #2196F3;
+        }
+        .map-btn.active {
+            background: #2196F3;
+            border-color: #2196F3;
+        }
+        /* Loader styles */
+        .loader-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: #121212;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+            transition: opacity 0.4s ease;
+        }
+        .spinner {
+            width: 36px;
+            height: 36px;
+            border: 3px solid rgba(255, 255, 255, 0.1);
+            border-top-color: #2196F3;
+            border-radius: 50%;
+            animation: spin 1s infinite linear;
+            margin-bottom: 12px;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .loader-text {
+            font-size: 12px;
+            color: #a0a0a0;
+            font-weight: 500;
+        }
+        /* Legend styles */
+        .legend-container {
+            position: absolute;
+            bottom: 12px;
+            left: 12px;
+            z-index: 1000;
+            background: rgba(30, 30, 30, 0.85);
+            padding: 6px 10px;
+            border-radius: 6px;
+            font-size: 10px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .legend-color {
+            width: 12px;
+            height: 12px;
+            border-radius: 3px;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="loader-container" id="loader">
+        <div class="spinner"></div>
+        <div class="loader-text" id="loader-msg">Gençtek Atlas yükleniyor...</div>
+    </div>
+
+    <div class="map-overlay">
+        <h4 id="title">📍 Gençtek Coğrafi Atlası</h4>
+        <p id="details">Leaflet ve GeoJSON destekli interaktif Türkiye haritası. İllere tıklayarak aktif etkinlikleri keşfedin.</p>
+    </div>
+
+    <div class="theme-selector">
+        <button class="map-btn active" id="btn-dark" onclick="setMapTheme('dark')">🕶️ Koyu</button>
+        <button class="map-btn" id="btn-light" onclick="setMapTheme('light')">☀️ Açık</button>
+    </div>
+
+    <div class="legend-container">
+        <div class="legend-item">
+            <span class="legend-color" style="background: rgba(33, 150, 243, 0.8); border: 1px solid #2196F3;"></span>
+            <span>Yazılım / Teknoloji (İstanbul)</span>
+        </div>
+        <div class="legend-item">
+            <span class="legend-color" style="background: rgba(0, 230, 118, 0.8); border: 1px solid #00E676;"></span>
+            <span>Bilim / İnovasyon (Ankara)</span>
+        </div>
+        <div class="legend-item">
+            <span class="legend-color" style="background: rgba(224, 64, 251, 0.8); border: 1px solid #E040FB;"></span>
+            <span>Sanat / Tasarım (İzmir)</span>
+        </div>
+    </div>
+
+    <div id="map"></div>
+
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    <script>
+        var map;
+        var currentTheme = 'dark';
+        var geojsonLayer;
+        var activeProvinceHighlight = null;
+
+        // Custom Event Data matching the application mock system
+        var eventHubs = [
+            { name: "İstanbul", lat: 41.0082, lng: 28.9784, count: 5, type: "tech", summary: "Zirveler, Yapay Zeka Kampı ve Hackathonlar" },
+            { name: "Ankara", lat: 39.9334, lng: 32.8597, count: 3, type: "science", summary: "Bilim Festivalleri, Savunma Sanayii Kuluçka" },
+            { name: "İzmir", lat: 38.4192, lng: 27.1287, count: 2, type: "art", summary: "Tasarım Maratonları, Kültür Sanat Buluşmaları" }
+        ];
+
+        // Map tile configurations
+        var tiles = {
+            dark: {
+                url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+                options: {
+                    attribution: '&copy; <a href="https://carto.com/attributions">CARTO</a>'
+                }
+            },
+            light: {
+                url: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
+                options: {
+                    attribution: '&copy; OpenStreetMap'
+                }
+            }
+        };
+
+        var currentTileLayer;
+
+        function initMap() {
+            try {
+                // Initialize map focused on Turkey's geographical center
+                map = L.map('map', {
+                    zoomControl: false, // Custom zoom handle from Compose / simple overlay
+                    center: [38.9637, 35.2433],
+                    zoom: 6,
+                    minZoom: 5,
+                    maxZoom: 11
+                });
+
+                // Add zoom control to bottom right for clean UI
+                L.control.zoom({ position: 'bottomright' }).addTo(map);
+
+                // Load initial tile layer
+                setMapTheme('dark');
+
+                // Add city markers (Event Hubs)
+                addMarkers();
+
+                // Load Turkey Provinces GeoJSON Boundaries
+                loadTurkeyGeoJSON();
+
+            } catch (err) {
+                console.error("Map initialization failed: ", err);
+                document.getElementById('loader-msg').innerHTML = "Harita yüklenemedi. İnternet bağlantısını kontrol edin.";
+            }
+        }
+
+        function setMapTheme(theme) {
+            currentTheme = theme;
+            document.getElementById('btn-dark').classList.toggle('active', theme === 'dark');
+            document.getElementById('btn-light').classList.toggle('active', theme === 'light');
+
+            // Apply body styling
+            if (theme === 'dark') {
+                document.body.style.backgroundColor = "#121212";
+                document.body.style.color = "#e0e0e0";
+                document.getElementById('map').style.backgroundColor = "#121212";
+            } else {
+                document.body.style.backgroundColor = "#f5f5f5";
+                document.body.style.color = "#212121";
+                document.getElementById('map').style.backgroundColor = "#f5f5f5";
+            }
+
+            if (currentTileLayer) {
+                map.removeLayer(currentTileLayer);
+            }
+
+            var selectedTile = tiles[theme];
+            currentTileLayer = L.tileLayer(selectedTile.url, selectedTile.options).addTo(map);
+
+            // Re-style GeoJSON if loaded
+            if (geojsonLayer) {
+                geojsonLayer.setStyle(getGeoJSONStyle);
+            }
+        }
+
+        function addMarkers() {
+            eventHubs.forEach(function(hub) {
+                // Create custom HTML element for marker
+                var customIcon = L.divIcon({
+                    className: 'glowing-marker ' + hub.type,
+                    html: '<div class="pulse"></div>',
+                    iconSize: [20, 20],
+                    iconAnchor: [10, 10]
+                });
+
+                var marker = L.marker([hub.lat, hub.lng], { icon: customIcon }).addTo(map);
+                
+                // Add stylized popup
+                var popupContent = `
+                    <div style="font-family: inherit; color: #1e1e1e; min-width: 160px; padding: 4px;">
+                        <h4 style="margin:0 0 6px 0; color:#2196F3; font-size:13px; font-weight:700;">📍 ${hub.name} Hub</h4>
+                        <p style="margin:0 0 8px 0; font-size:11px; line-height:1.4; color:#555;">${hub.summary}</p>
+                        <div style="display:flex; justify-content:space-between; align-items:center; border-top:1px solid #eee; padding-top:6px;">
+                            <span style="font-size:10px; font-weight:bold; background:#e3f2fd; color:#1976d2; padding:2px 6px; border-radius:10px;">${hub.count} Aktif Etkinlik</span>
+                            <button onclick="selectCityFromMap('${hub.name}')" style="background:#2196F3; color:white; border:none; padding:3px 8px; border-radius:4px; font-size:10px; font-weight:bold; cursor:pointer;">Filtrele</button>
+                        </div>
+                    </div>
+                `;
+                marker.bindPopup(popupContent);
+            });
+        }
+
+        function getGeoJSONStyle(feature) {
+            var name = feature.properties.name || feature.properties.NAME_1 || "";
+            // Check if this province is an event hub to give it an accent base color
+            var isHub = eventHubs.some(function(h) { return h.name.toLowerCase() === name.toLowerCase(); });
+            
+            return {
+                fillColor: isHub ? '#2196F3' : (currentTheme === 'dark' ? '#333333' : '#b0bec5'),
+                weight: activeProvinceHighlight === name ? 3 : 1.5,
+                opacity: 1,
+                color: activeProvinceHighlight === name ? '#FFD54F' : (currentTheme === 'dark' ? '#555555' : '#ffffff'),
+                fillOpacity: activeProvinceHighlight === name ? 0.5 : (isHub ? 0.35 : 0.15)
+            };
+        }
+
+        function loadTurkeyGeoJSON() {
+            // Highly robust public raw Turkey GeoJSON resource representing provinces
+            var geojsonUrl = 'https://raw.githubusercontent.com/cihad/turkey-geojson/master/tr-cities.json';
+            
+            fetch(geojsonUrl)
+                .then(response => {
+                    if (!response.ok) throw new Error("Network response not ok");
+                    return response.json();
+                })
+                .then(data => {
+                    geojsonLayer = L.geoJSON(data, {
+                        style: getGeoJSONStyle,
+                        onEachFeature: onEachFeature
+                    }).addTo(map);
+
+                    // Fade out loader
+                    var loader = document.getElementById('loader');
+                    loader.style.opacity = 0;
+                    setTimeout(() => loader.style.display = 'none', 400);
+                })
+                .catch(error => {
+                    console.error("GeoJSON loading failed: ", error);
+                    // Use a fallback simplified layout without full GeoJSON boundaries, keeping markers interactive
+                    var loader = document.getElementById('loader');
+                    loader.style.opacity = 0;
+                    setTimeout(() => loader.style.display = 'none', 400);
+
+                    document.getElementById('details').innerHTML = "⚠️ İnternet bağlantısı sınırlı olduğundan sadece Coğrafi Hub işaretçileri gösterilmektedir. İlleri filtrelemek için simgeleri kullanabilirsiniz.";
+                });
+        }
+
+        function onEachFeature(feature, layer) {
+            layer.on({
+                mouseover: highlightFeature,
+                mouseout: resetHighlight,
+                click: onProvinceClick
+            });
+        }
+
+        function highlightFeature(e) {
+            var layer = e.target;
+            var name = layer.feature.properties.name || layer.feature.properties.NAME_1 || "";
+            
+            if (activeProvinceHighlight !== name) {
+                layer.setStyle({
+                    weight: 2.5,
+                    color: '#2196F3',
+                    fillOpacity: 0.4
+                });
+                
+                if (!L.Browser.ie && !L.Browser.opera && !L.Browser.edge) {
+                    layer.bringToFront();
+                }
+            }
+        }
+
+        function resetHighlight(e) {
+            geojsonLayer.resetStyle(e.target);
+        }
+
+        function onProvinceClick(e) {
+            var layer = e.target;
+            var name = layer.feature.properties.name || layer.feature.properties.NAME_1 || "";
+            
+            // Normalize province name (Capitalize first letter)
+            if (name) {
+                name = name.charAt(0).toUpperCase() + name.slice(1).toLowerCase();
+                // Handle Turkish casing edge case for I/İ
+                if (name === "Istanbul") name = "İstanbul";
+                if (name === "Izmir") name = "İzmir";
+            }
+
+            activeProvinceHighlight = name;
+            geojsonLayer.setStyle(getGeoJSONStyle);
+
+            // Center and zoom map to clicked province
+            map.fitBounds(e.target.getBounds(), { padding: [20, 20], maxZoom: 8 });
+
+            document.getElementById('title').innerHTML = `📍 ${name} Seçildi`;
+            
+            // Check events
+            var hub = eventHubs.find(h => h.name.toLowerCase() === name.toLowerCase());
+            if (hub) {
+                document.getElementById('details').innerHTML = `Bu ilde ${hub.count} aktif etkinlik / proje bulunuyor: ${hub.summary}`;
+            } else {
+                document.getElementById('details').innerHTML = `Bu ilde henüz aktif etkinlik bildirilmedi. Bu şehre ilk etkinliği sen ekleyebilirsin!`;
+            }
+
+            // Communicate with Android host
+            selectCityFromMap(name);
+        }
+
+        function selectCityFromMap(cityName) {
+            try {
+                if (window.AndroidBridge) {
+                    window.AndroidBridge.onCitySelected(cityName);
+                }
+            } catch (e) {
+                console.warn("AndroidBridge not found.", e);
+            }
+        }
+
+        // Exposed function for Android code to programmatically highlight or focus on a city
+        function focusCityFromAndroid(cityName) {
+            if (!geojsonLayer) return;
+            
+            var found = false;
+            geojsonLayer.eachLayer(function(layer) {
+                var name = layer.feature.properties.name || layer.feature.properties.NAME_1 || "";
+                if (name.toLowerCase() === cityName.toLowerCase()) {
+                    activeProvinceHighlight = name;
+                    geojsonLayer.setStyle(getGeoJSONStyle);
+                    map.fitBounds(layer.getBounds(), { padding: [30, 30], maxZoom: 8 });
+                    
+                    document.getElementById('title').innerHTML = `📍 ${cityName}`;
+                    var hub = eventHubs.find(h => h.name.toLowerCase() === cityName.toLowerCase());
+                    if (hub) {
+                        document.getElementById('details').innerHTML = `Android'den odaklandı: ${hub.count} aktif etkinlik bulunuyor.`;
+                    } else {
+                        document.getElementById('details').innerHTML = `Android'den odaklandı: Henüz aktif etkinlik yok.`;
+                    }
+                    found = true;
+                }
+            });
+
+            if (!found) {
+                // Focus on marker coordinates directly if GeoJSON fails or doesn't have it
+                var hub = eventHubs.find(h => h.name.toLowerCase() === cityName.toLowerCase());
+                if (hub) {
+                    map.setView([hub.lat, hub.lng], 8);
+                    document.getElementById('title').innerHTML = `📍 ${cityName}`;
+                    document.getElementById('details').innerHTML = `Android'den odaklandı: ${hub.count} aktif etkinlik.`;
+                }
+            }
+        }
+
+        // Initialize map on window load
+        window.onload = initMap;
+    </script>
+</body>
+</html>

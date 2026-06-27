@@ -1,0 +1,6 @@
+{
+  "name": "GençTek Atlas",
+  "description": "Öğrenci ve öğretmenler için dijital rehber.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
